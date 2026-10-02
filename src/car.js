@@ -8,7 +8,7 @@ import { SIM } from './config.js';
  * subtle body roll / suspension heave.
  */
 
-const WHEEL_RADIUS = 0.34;
+const WHEEL_RADIUS = 0.36;
 
 // ---------------------------------------------------------------- materials
 function makePaint() {
@@ -60,7 +60,10 @@ function extrudeProfile(points, halfWidth, bevel, bevelSegments = 3) {
     bevelSegments,
     curveSegments: 6,
   });
-  geo.rotateY(-Math.PI / 2); // extrusion (shape +Z) -> world +X (width)
+  geo.rotateY(-Math.PI / 2); // extrusion (shape +Z) -> world -X
+  // Extrusion runs 0..-depth after rotation; recenter on X so the body
+  // spans [-halfWidth, +halfWidth] and both wheel sides are symmetric.
+  geo.translate(halfWidth - bevel, 0, 0);
   geo.computeVertexNormals();
   return geo;
 }
@@ -73,32 +76,36 @@ function box(w, h, d, mat, x, y, z) {
 }
 
 // ---------------------------------------------------------------- wheels
-function makeWheel() {
+// `side` = +1 for right wheels, -1 for left: the rim face must point
+// OUTBOARD (away from the body), otherwise spokes hide inside the tire.
+function makeWheel(side) {
   const wheel = new THREE.Group();
 
   const tire = new THREE.Mesh(
-    new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.24, 28),
+    new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.26, 32),
     MAT.tire);
   tire.rotation.z = Math.PI / 2;
   tire.castShadow = true;
   wheel.add(tire);
 
-  // 5-spoke alloy (2004 Accord EX style)
+  // 5-spoke alloy (2004 Accord EX style) — flush with the outboard tire
+  // face (x = side * 0.13) so the rim is actually visible.
   const rim = new THREE.Group();
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.25, 16), MAT.rim);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.30, 16), MAT.rim);
   hub.rotation.z = Math.PI / 2;
   rim.add(hub);
   for (let i = 0; i < 5; i++) {
-    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.24, 0.07), MAT.rim);
-    spoke.position.y = 0.14;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.08), MAT.rim);
+    spoke.position.set(side * 0.115, 0.15, 0);
     const arm = new THREE.Group();
     arm.add(spoke);
     arm.rotation.x = (i / 5) * Math.PI * 2;
     rim.add(arm);
   }
   const lip = new THREE.Mesh(
-    new THREE.TorusGeometry(0.24, 0.025, 8, 28), MAT.rim);
+    new THREE.TorusGeometry(0.27, 0.03, 8, 28), MAT.rim);
   lip.rotation.y = Math.PI / 2;
+  lip.position.x = side * 0.125;
   rim.add(lip);
   wheel.add(rim);
 
@@ -126,8 +133,9 @@ export function createCar() {
   body.add(lower);
 
   // ---- greenhouse: windshield / roof / rear glass (tinted, reflective)
+  // Raked like the real Accord: long shallow windshield, fast rear glass.
   const glassProfile = [
-    [0.92, 1.00], [0.42, 1.44], [-0.62, 1.46], [-1.32, 1.00],
+    [1.00, 1.00], [0.28, 1.42], [-0.70, 1.44], [-1.42, 1.00],
   ];
   const greenhouse = new THREE.Mesh(extrudeProfile(glassProfile, 0.78, 0.07, 4), MAT.glass);
   greenhouse.castShadow = true;
@@ -173,14 +181,35 @@ export function createCar() {
   body.add(box(0.36, 0.11, 0.02, new THREE.MeshStandardMaterial({ color: 0xe8e8e0, roughness: 0.5 }), 0, 0.60, -2.40));
   body.add(box(0.36, 0.11, 0.02, new THREE.MeshStandardMaterial({ color: 0xe8e8e0, roughness: 0.5 }), 0, 0.55, 2.40));
 
+  // ---- contact shadow: soft dark blob hugging the sills so the car
+  // reads as planted even when the sun cast shadow falls elsewhere.
+  const blobCanvas = document.createElement('canvas');
+  blobCanvas.width = blobCanvas.height = 128;
+  const bctx = blobCanvas.getContext('2d');
+  const grad = bctx.createRadialGradient(64, 64, 8, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.6, 'rgba(0,0,0,0.30)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  bctx.fillStyle = grad;
+  bctx.fillRect(0, 0, 128, 128);
+  const contact = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 5.2),
+    new THREE.MeshBasicMaterial({
+      map: new THREE.CanvasTexture(blobCanvas),
+      transparent: true, depthWrite: false,
+    }));
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.y = 0.012;
+  group.add(contact);
+
   // ---- wheels (unsprung — stay planted while the body heaves)
   const wheels = [];
   const wheelPos = [
-    [0.82, WHEEL_RADIUS, 1.45], [-0.82, WHEEL_RADIUS, 1.45],
-    [0.82, WHEEL_RADIUS, -1.45], [-0.82, WHEEL_RADIUS, -1.45],
+    [0.92, WHEEL_RADIUS, 1.45, 1], [-0.92, WHEEL_RADIUS, 1.45, -1],
+    [0.92, WHEEL_RADIUS, -1.45, 1], [-0.92, WHEEL_RADIUS, -1.45, -1],
   ];
-  for (const [x, y, z] of wheelPos) {
-    const w = makeWheel();
+  for (const [x, y, z, side] of wheelPos) {
+    const w = makeWheel(side);
     w.position.set(x, y, z);
     group.add(w);
     wheels.push(w);
@@ -188,9 +217,10 @@ export function createCar() {
 
   // ---------------------------------------------------------------- update
   function update(dt, t) {
-    // Wheel spin: v = omega * r, forward (+Z) => spin about -X.
+    // Wheel spin: v = omega * r. Forward (+Z) means the tire top travels
+    // +Z relative to the axle -> rotation.x INCREASES (right-hand rule).
     const spin = (SIM.speedMs / WHEEL_RADIUS) * dt;
-    for (const w of wheels) w.rotation.x -= spin;
+    for (const w of wheels) w.rotation.x += spin;
 
     // Subtle suspension heave + body roll + pitch under the speed wobble.
     const heave = Math.sin(t * 6.1) * 0.006 + Math.sin(t * 2.3) * 0.004;

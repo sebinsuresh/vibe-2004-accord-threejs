@@ -31,8 +31,8 @@ function buildSkyEnvScene() {
     side: THREE.BackSide,
     uniforms: {
       top: { value: new THREE.Color(0x3a6ea8) },
-      horizon: { value: new THREE.Color(0xcfd8e0) },
-      bottom: { value: new THREE.Color(0x2a2d31) },
+      horizon: { value: new THREE.Color(0xe8eef4) },
+      bottom: { value: new THREE.Color(0x1e2124) },
       sunDir: { value: new THREE.Vector3(0.5, 0.35, 0.6).normalize() },
     },
     vertexShader: /* glsl */ `
@@ -46,10 +46,14 @@ function buildSkyEnvScene() {
       varying vec3 vDir;
       void main() {
         float h = vDir.y;
-        vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.6))
-                         : mix(horizon, bottom, pow(-h, 0.5));
-        float sun = pow(max(dot(normalize(vDir), sunDir), 0.0), 220.0);
-        c += vec3(1.0, 0.95, 0.85) * sun * 4.0;
+        vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.55))
+                         : mix(horizon, bottom, pow(-h, 0.4));
+        float d = dot(normalize(vDir), sunDir);
+        // tight sun disc + wide glow -> sharp specular streaks on the paint
+        c += vec3(1.0, 0.95, 0.85) * pow(max(d, 0.0), 300.0) * 12.0;
+        c += vec3(1.0, 0.9, 0.75) * pow(max(d, 0.0), 24.0) * 1.2;
+        // bright horizon band = strong reflection across the flanks
+        c += vec3(0.9, 0.95, 1.0) * pow(1.0 - abs(h), 14.0) * 0.8;
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
@@ -64,8 +68,8 @@ const skyMat = new THREE.ShaderMaterial({
   fog: false,
   uniforms: {
     top: { value: new THREE.Color(0x3a6ea8) },
-    horizon: { value: new THREE.Color(0xbcc7d2) },
-    bottom: { value: new THREE.Color(0x24272b) },
+    horizon: { value: new THREE.Color(0xd3dce4) },
+    bottom: { value: new THREE.Color(0x3a3d41) },
   },
   vertexShader: /* glsl */ `
     varying vec3 vDir;
@@ -86,7 +90,7 @@ const skyMat = new THREE.ShaderMaterial({
 scene.add(new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), skyMat));
 
 // Atmospheric fog — haze everything that rushes past.
-scene.fog = new THREE.Fog(0xbcc7d2, 40, 220);
+scene.fog = new THREE.Fog(0xd3dce4, 40, 220);
 
 // ---------------------------------------------------------------- camera
 const camera = new THREE.PerspectiveCamera(
@@ -94,11 +98,13 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(-4.6, 2.1, -5.4); // low 3/4 rear-left chase view
 
 // ---------------------------------------------------------------- lights
-const hemi = new THREE.HemisphereLight(0x9db8d8, 0x3a3f45, 0.7);
+const hemi = new THREE.HemisphereLight(0xbdd2ea, 0x55594e, 1.15);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff2df, 2.6);
-sun.position.set(14, 16, 12);
+// Sun high and slightly forward-right: keeps the cast shadow tight under
+// the car instead of flung off to the side (anti-"floating" cue).
+const sun = new THREE.DirectionalLight(0xfff2df, 2.4);
+sun.position.set(7, 20, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -12;
