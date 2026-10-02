@@ -246,11 +246,13 @@ export function createCar() {
   contact.position.y = 0.012;
   group.add(contact);
 
-  // ---- wheels (unsprung — stay planted while the body heaves)
+  // ---- wheels (unsprung — stay planted while the body heaves).
+  // x=0.86 puts the outer tire face at 0.98, ~8cm OUTSIDE the body side
+  // (0.90): coplanar faces here caused z-fighting along the arches.
   const wheels = [];
   const wheelPos = [
-    [0.78, WHEEL_RADIUS, WB_HALF, 1], [-0.78, WHEEL_RADIUS, WB_HALF, -1],
-    [0.78, WHEEL_RADIUS, -WB_HALF, 1], [-0.78, WHEEL_RADIUS, -WB_HALF, -1],
+    [0.86, WHEEL_RADIUS, WB_HALF, 1], [-0.86, WHEEL_RADIUS, WB_HALF, -1],
+    [0.86, WHEEL_RADIUS, -WB_HALF, 1], [-0.86, WHEEL_RADIUS, -WB_HALF, -1],
   ];
   for (const [x, y, z, side] of wheelPos) {
     const w = makeWheel(side);

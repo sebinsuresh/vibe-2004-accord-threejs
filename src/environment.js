@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SIM } from './config.js';
+import { SIM, randRange } from './config.js';
 
 /**
  * Highway environment: scrolling asphalt with painted lane markings,
@@ -20,12 +20,12 @@ function makeAsphaltTexture() {
   c.width = c.height = size;
   const ctx = c.getContext('2d');
 
-  ctx.fillStyle = '#33363a';
+  ctx.fillStyle = '#2b2e33';
   ctx.fillRect(0, 0, size, size);
 
   // speckled aggregate
   for (let i = 0; i < 9000; i++) {
-    const g = 40 + Math.random() * 70;
+    const g = 28 + Math.random() * 52;
     ctx.fillStyle = `rgba(${g},${g},${g + 4},${0.25 + Math.random() * 0.4})`;
     ctx.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
   }
@@ -79,6 +79,22 @@ export function createEnvironment() {
   ground.position.y = -0.02;
   ground.receiveShadow = true;
   group.add(ground);
+
+  // ---- distant hill silhouettes: give the haze band shape (atmospheric
+  // perspective — low-contrast bluish values receding behind the fog).
+  const hillMat = new THREE.MeshStandardMaterial({
+    color: 0x4d5866, roughness: 1.0, metalness: 0.0, fog: true });
+  const hillZ = 110;   // closer + darker: silhouette survives the fog band
+  for (let i = 0; i < 11; i++) {
+    // NOTE: ConeGeometry takes a RADIUS — keep it <=80 so the base edge
+    // (z >= 10) stays well ahead of the chase camera at z ~ -5.6.
+    const r = randRange(35, 80);
+    const h = randRange(18, 42);
+    const hill = new THREE.Mesh(new THREE.ConeGeometry(r, h, 5), hillMat);
+    hill.position.set(randRange(-160, 200), h / 2 - 2, hillZ + randRange(-10, 30));
+    hill.rotation.y = Math.random() * Math.PI;
+    group.add(hill);
+  }
 
   // ---- asphalt
   const asphaltTex = makeAsphaltTexture();

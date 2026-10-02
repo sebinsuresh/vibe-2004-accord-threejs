@@ -144,9 +144,12 @@ function buildPetals(count) {
 
   const data = [];
   for (let i = 0; i < count; i++) {
+    // Bias petals into a stream flowing past the car's left/rear side —
+    // compositional flow toward the vanishing point, not random scatter.
+    const stream = Math.random() < 0.6;
     data.push({
-      x: randRange(-BOX.x, BOX.x),
-      y: randRange(0.2, 3.2),
+      x: stream ? randRange(-6.5, -1.2) : randRange(-BOX.x, BOX.x),
+      y: stream ? randRange(0.3, 2.2) : randRange(0.2, 3.2),
       z: randRange(-BOX.z, BOX.z),
       speedMul: randRange(0.85, 1.25),
       swayAmp: randRange(0.3, 1.1),
@@ -303,14 +306,17 @@ export function createParticles(taillightAnchors = []) {
 
         if (p.z < -BOX.z || p.y < 0.02) {
           p.z = randRange(BOX.z * 0.4, BOX.z);
-          p.y = randRange(0.6, 3.2);
-          p.x = randRange(-BOX.x, BOX.x);
+          const stream = Math.random() < 0.6;
+          p.y = stream ? randRange(0.3, 2.2) : randRange(0.6, 3.2);
+          p.x = stream ? randRange(-6.5, -1.2) : randRange(-BOX.x, BOX.x);
         }
 
         dummy.position.set(p.x, p.y, p.z);
+        // lie the petal roughly flat in the airstream, tumbling around X:
+        // reads as flow along the road rather than confetti facing camera
         dummy.rotation.set(
-          t * p.spin + p.phase,
-          t * p.spin * 0.7,
+          Math.PI / 2 + Math.sin(t * p.spin + p.phase) * 0.7,
+          t * p.spin * 0.4,
           Math.sin(t * p.swayFreq + p.phase) * 1.2);
         dummy.scale.setScalar(p.scale);
         dummy.updateMatrix();
