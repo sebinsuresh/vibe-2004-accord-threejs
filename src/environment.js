@@ -9,6 +9,7 @@ import { SIM, randRange } from './config.js';
  */
 
 const ROAD_HALF = 6.0;      // half-width of asphalt
+const ROAD_LEN = 1400;      // road/props length: lane lines converge far past the fog wall
 const SEG = 40;             // repeating length of road texture tiles
 const POLE_SPACING = 24;    // meters between light poles
 const POLE_COUNT = 12;
@@ -73,7 +74,7 @@ export function createEnvironment() {
 
   // ---- ground (dirt/grass tone, catches shadow softly)
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 600),
+    new THREE.PlaneGeometry(1200, ROAD_LEN),
     new THREE.MeshStandardMaterial({ color: 0x4a4f42, roughness: 1.0 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.02;
@@ -99,7 +100,7 @@ export function createEnvironment() {
   // ---- asphalt
   const asphaltTex = makeAsphaltTexture();
   const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_HALF * 2, 600),
+    new THREE.PlaneGeometry(ROAD_HALF * 2, ROAD_LEN),
     new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.92, metalness: 0.05 }));
   road.rotation.x = -Math.PI / 2;
   road.receiveShadow = true;
@@ -108,7 +109,7 @@ export function createEnvironment() {
   // ---- lane markings (transparent overlay, scrolls via UV offset)
   const laneTex = makeLaneTexture();
   const lanes = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROAD_HALF * 2, 600),
+    new THREE.PlaneGeometry(ROAD_HALF * 2, ROAD_LEN),
     new THREE.MeshStandardMaterial({
       map: laneTex, transparent: true, roughness: 0.6,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
@@ -120,7 +121,7 @@ export function createEnvironment() {
   // ---- shoulders
   const shoulderMat = new THREE.MeshStandardMaterial({ color: 0x5a5d60, roughness: 0.95 });
   for (const s of [1, -1]) {
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 600), shoulderMat);
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, ROAD_LEN), shoulderMat);
     sh.position.set(s * (ROAD_HALF + 0.6), 0.04, 0);
     sh.receiveShadow = true;
     group.add(sh);
@@ -130,12 +131,12 @@ export function createEnvironment() {
   const railMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, metalness: 0.85, roughness: 0.35 });
   const posts = [];
   for (const s of [1, -1]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, 600), railMat);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, ROAD_LEN), railMat);
     beam.position.set(s * (ROAD_HALF + 2.2), 0.65, 0);
     group.add(beam);
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 140; i++) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), railMat);
-      post.position.set(s * (ROAD_HALF + 2.2), 0.35, -300 + i * 10);
+      post.position.set(s * (ROAD_HALF + 2.2), 0.35, -ROAD_LEN / 2 + i * 10);
       posts.push(post);
     }
   }
@@ -162,7 +163,7 @@ export function createEnvironment() {
   }
 
   // ---------------------------------------------------------------- update
-  const wrap = 600;
+  const wrap = ROAD_LEN;
   function update(dt) {
     const v = SIM.speedMs * dt;
 

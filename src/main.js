@@ -161,8 +161,8 @@ scene.add(clouds.group);
 const clock = new THREE.Clock();
 
 function step(dt, t) {
-  // Gentle speed oscillation so the sim feels alive (110-130 km/h).
-  SIM.speedKmh = SIM.baseSpeedKmh + Math.sin(t * 0.7) * 10;
+  // Gentle speed oscillation so the sim feels alive (69-81 mph).
+  SIM.speedMph = SIM.baseSpeedMph + Math.sin(t * 0.7) * 6;
   SIM.distance += SIM.speedMs * dt;
 
   car.update(dt, t);
@@ -171,12 +171,12 @@ function step(dt, t) {
   clouds.update(dt);
 
   // Camera micro-sway synced to speed.
-  camera.position.y = 2.0 + Math.sin(t * 5.3) * 0.008 * SIM.speedKmh * 0.05;
+  camera.position.y = 2.0 + Math.sin(t * 5.3) * 0.008 * SIM.speedMph * 0.05;
   // Rule of thirds: bias the look target right so the car sits on the
   // left vertical third with the vanishing point on the right third.
   camera.lookAt(0.7, 0.8, 0.9);
 
-  speedLabel.textContent = Math.round(SIM.speedKmh);
+  speedLabel.textContent = Math.round(SIM.speedMph);
   renderer.render(scene, camera);
 }
 

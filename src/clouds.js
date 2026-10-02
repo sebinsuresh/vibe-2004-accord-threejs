@@ -22,35 +22,53 @@ function makePuffTexture(seed) {
   let s = seed;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
 
-  // cauliflower stack: bigger blobs low-center, smaller puffs on top
+  // cumulus structure: dense flat-ish base row, puffy tower above,
+  // smaller anvil wisps at top. Crisper blobs (less falloff) so it
+  // reads as a cloud body, not smoke.
   const blobs = [];
-  for (let i = 0; i < 14; i++) {
-    const t = i / 14;
-    blobs.push({
-      x: size * (0.5 + (rnd() - 0.5) * (0.75 - t * 0.45)),
-      y: size * (0.72 - t * 0.5 + (rnd() - 0.5) * 0.12),
-      r: size * (0.20 + rnd() * 0.14) * (1.15 - t * 0.55),
-    });
+  for (let i = 0; i < 7; i++) {           // base row
+    blobs.push({ x: size * (0.18 + i * 0.11 + (rnd() - 0.5) * 0.06),
+                 y: size * (0.66 + (rnd() - 0.5) * 0.08),
+                 r: size * (0.13 + rnd() * 0.05) });
+  }
+  for (let i = 0; i < 6; i++) {           // tower puffs
+    const t = i / 6;
+    blobs.push({ x: size * (0.35 + rnd() * 0.3 + (rnd() - 0.5) * 0.1),
+                 y: size * (0.52 - t * 0.3 + (rnd() - 0.5) * 0.07),
+                 r: size * (0.15 + rnd() * 0.07) * (1.1 - t * 0.4) });
+  }
+  for (let i = 0; i < 3; i++) {           // anvil wisps
+    blobs.push({ x: size * (0.3 + rnd() * 0.4),
+                 y: size * (0.16 + rnd() * 0.06),
+                 r: size * (0.07 + rnd() * 0.04) });
   }
 
+  // build silhouette first (opaque white), then light it
+  ctx.fillStyle = '#ffffff';
   for (const b of blobs) {
-    const g = ctx.createRadialGradient(b.x, b.y - b.r * 0.25, b.r * 0.1, b.x, b.y, b.r);
-    // sunlit upper-left, shaded base
-    g.addColorStop(0, 'rgba(255,255,255,0.95)');
-    g.addColorStop(0.55, 'rgba(238,242,247,0.75)');
-    g.addColorStop(1, 'rgba(205,214,224,0)');
-    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx.fill();
   }
+  // soften only the outer edge: blur-copy the silhouette slightly
+  ctx.filter = 'blur(3px)';
+  ctx.drawImage(c, 0, 0);
+  ctx.filter = 'none';
 
-  // shade the underside (cumulonimbus anvil base is dark)
-  const shade = ctx.createLinearGradient(0, size * 0.55, 0, size * 0.9);
-  shade.addColorStop(0, 'rgba(120,130,145,0)');
-  shade.addColorStop(1, 'rgba(95,105,120,0.35)');
+  // golden-hour lighting: warm sun from the left lights the left/top
+  // faces; the right/underside falls into cool blue shadow.
   ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = shade;
+  const sunSide = ctx.createLinearGradient(0, size * 0.2, size, size * 0.8);
+  sunSide.addColorStop(0, 'rgba(255,214,170,0.85)');   // warm lit edge
+  sunSide.addColorStop(0.45, 'rgba(250,244,238,0.55)');
+  sunSide.addColorStop(1, 'rgba(96,110,140,0.75)');    // cool shadow side
+  ctx.fillStyle = sunSide;
+  ctx.fillRect(0, 0, size, size);
+  // darker cloud base (underside)
+  const base = ctx.createLinearGradient(0, size * 0.5, 0, size * 0.85);
+  base.addColorStop(0, 'rgba(70,84,110,0)');
+  base.addColorStop(1, 'rgba(70,84,110,0.55)');
+  ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
   ctx.globalCompositeOperation = 'source-over';
 
@@ -73,13 +91,15 @@ export function createClouds() {
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(scale, scale * randRange(0.62, 0.8), 1);
     // Place clouds in the visible sky band: ahead of the car (the chase
-    // cam looks forward), at 3-12 deg elevation so they sit above the
-    // horizon but inside the camera frustum.
+    // cam looks forward), and LIFTED so the sprite's bottom edge stays
+    // above the horizon — otherwise low clouds paint over the road.
     const dist = randRange(120, 360);
-    const elev = THREE.MathUtils.degToRad(randRange(1, 8));
+    const elev = THREE.MathUtils.degToRad(randRange(2, 9));
+    const halfH = sprite.scale.y / 2;
+    const horizonY = 2 + dist * Math.tan(THREE.MathUtils.degToRad(1.5));
     sprite.position.set(
       randRange(-0.9, 0.9) * dist,
-      2 + dist * Math.tan(elev),
+      Math.max(horizonY, dist * Math.tan(elev)) + halfH,
       randRange(0.25, 1) * dist);
     sprite.renderOrder = -1;
     group.add(sprite);
@@ -94,10 +114,13 @@ export function createClouds() {
       c.sprite.position.z -= (v + c.drift) * dt;
       if (c.sprite.position.z < 40) {
         const dist = randRange(120, 360);
-        const elev = THREE.MathUtils.degToRad(randRange(1, 8));
+        const elev = THREE.MathUtils.degToRad(randRange(2, 9));
+        const halfH = c.sprite.scale.y / 2;
+        const horizonY = 2 + dist * Math.tan(THREE.MathUtils.degToRad(1.5));
         c.sprite.position.z = randRange(0.25, 1) * dist;
         c.sprite.position.x = randRange(-0.9, 0.9) * dist;
-        c.sprite.position.y = 2 + dist * Math.tan(elev);
+        c.sprite.position.y =
+          Math.max(horizonY, dist * Math.tan(elev)) + halfH;
       }
     }
   }

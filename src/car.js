@@ -163,9 +163,9 @@ export function createCar() {
   // ---- sunroof: dark flush panel on the roof
   body.add(box(0.72, 0.02, 0.62, MAT.darkTrim, 0, 1.452, -0.15));
 
-  // ---- bumpers (body-colour, smoothly rounded per reference)
-  body.add(box(1.68, 0.34, 0.18, MAT.bumperPaint, 0, 0.55, FRONT_Z - 0.02));
-  body.add(box(1.68, 0.36, 0.16, MAT.bumperPaint, 0, 0.55, REAR_Z + 0.02));
+  // ---- bumpers: body-colour, flush with the body (the bevelled profile
+  // already reads as a rounded bumper; separate slabs looked like extra
+  // extrusions on the real car's smooth nose/tail).
 
   // ---- front fascia: SMALL narrow 2-bar grille + wide low mesh intake
   body.add(box(0.62, 0.10, 0.05, MAT.meshIntake, 0, 0.85, FRONT_Z - 0.01));
@@ -176,24 +176,28 @@ export function createCar() {
   body.add(box(0.16, 0.09, 0.04, MAT.meshIntake, 0.66, 0.47, FRONT_Z));
   body.add(box(0.16, 0.09, 0.04, MAT.meshIntake, -0.66, 0.47, FRONT_Z));
 
-  // ---- headlights: large swept wrap-around clear units + amber corner
+  // ---- headlights: one connected L-shaped cluster per side (front face
+  // + fender wrap meeting at the corner, no gaps). The 2004 pre-facelift
+  // has the amber turn/reflectors INSIDE the clear lens, not as a
+  // separate side box — so the amber sits inset on the outer front face.
   for (const s of [1, -1]) {
-    body.add(box(0.46, 0.17, 0.05, MAT.headlight, s * 0.60, 0.84, FRONT_Z - 0.02)); // front face
-    body.add(box(0.05, 0.14, 0.40, MAT.headlight, s * 0.885, 0.83, 1.94));          // fender wrap
-    body.add(box(0.05, 0.09, 0.14, MAT.amber, s * 0.89, 0.80, 1.72));               // amber reflector
+    body.add(box(0.50, 0.17, 0.04, MAT.headlight, s * 0.59, 0.84, FRONT_Z - 0.015)); // front face (x 0.34..0.84)
+    body.add(box(0.04, 0.15, 0.52, MAT.headlight, s * 0.91, 0.83, 1.96));            // fender wrap on the body side (x 0.89..0.93)
+    body.add(box(0.10, 0.10, 0.045, MAT.amber, s * 0.76, 0.82, FRONT_Z - 0.007));    // inner amber section
   }
 
-  // ---- taillights: horizontal red wedge wrapping the corner + clear reverse section
+  // ---- taillights: connected L-shaped wedge per side; face meets the
+  // corner wrap with no gap, plus a clear reverse-light section.
   for (const s of [1, -1]) {
-    body.add(box(0.40, 0.15, 0.05, MAT.taillight, s * 0.62, 0.87, REAR_Z + 0.01));
-    body.add(box(0.05, 0.13, 0.44, MAT.taillight, s * 0.885, 0.86, -2.30));
-    body.add(box(0.12, 0.10, 0.05, MAT.reverseLens, s * 0.34, 0.85, REAR_Z + 0.012));
+    body.add(box(0.50, 0.15, 0.04, MAT.taillight, s * 0.60, 0.87, REAR_Z + 0.012));  // face (x 0.35..0.85)
+    body.add(box(0.04, 0.13, 0.56, MAT.taillight, s * 0.91, 0.86, -2.29));           // wrap (z -2.01..-2.57)
+    body.add(box(0.12, 0.10, 0.045, MAT.reverseLens, s * 0.41, 0.85, REAR_Z + 0.004));
   }
 
-  // ---- chrome beltline molding (window base) + door protective molding
+  // ---- chrome beltline molding (window base) + body-colour door molding
   for (const s of [1, -1]) {
-    body.add(box(0.02, 0.025, 2.05, MAT.chrome, s * 0.905, 0.975, -0.10));
-    body.add(box(0.02, 0.035, 1.90, MAT.chrome, s * 0.91, 0.72, -0.05));
+    body.add(box(0.015, 0.025, 2.05, MAT.chrome, s * 0.902, 0.975, -0.10));
+    body.add(box(0.015, 0.035, 1.90, MAT.paint, s * 0.902, 0.72, -0.05));
   }
 
   // ---- side mirrors: teardrop housing + small amber indicator

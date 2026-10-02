@@ -164,15 +164,51 @@ function buildPetals(count) {
 }
 
 // ---------------------------------------------------------------- anime taillight streaks
+function makeStreakTexture() {
+  // head (u=0, at the lamp) hot and opaque, tail (u=1) fades out
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 8;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 128, 0);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,140,110,0.85)');
+  g.addColorStop(1, 'rgba(255,60,40,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 8);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Tapered quad: narrow at local x=0 (the lamp), wider at x=1 (the tail).
+// Length is per-instance scale.x; width variation is scale.y.
+function makeTaperedQuad(narrowW, wideW) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, -narrowW / 2, 0,
+    0,  narrowW / 2, 0,
+    1, -wideW / 2, 0,
+    1,  wideW / 2, 0,
+  ]), 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+    0, 0, 0, 1, 1, 0, 1, 1,
+  ]), 2));
+  geo.setIndex([0, 1, 2, 2, 1, 3]);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function buildTailStreaks(anchors) {
-  // Each taillight anchor emits several long red glow quads that stream
-  // straight back — the manga "speed line" look anchored to the lamps.
-  // Quads instead of LineSegments: WebGL lines are 1px and read as nothing.
+  // Each taillight anchor emits tapered red glow trails that start thin
+  // at the lamp and widen + fade as they stream backward — the manga
+  // speed-line look. Crossed ribbons (vertical + horizontal) so the
+  // trail never disappears edge-on from the chase camera.
   const perAnchor = 6;
-  const count = anchors.length * perAnchor * 2; // crossed ribbon: 2 quads/streak
-  const geo = new THREE.PlaneGeometry(1, 1); // scaled per instance
+  const count = anchors.length * perAnchor * 2; // 2 quads/streak
+  const geo = makeTaperedQuad(0.05, 0.30);
   const mat = new THREE.MeshBasicMaterial({
-    transparent: true, opacity: 0.38, side: THREE.DoubleSide,
+    map: makeStreakTexture(),
+    transparent: true, opacity: 0.5, side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
     color: 0xffffff,
   });
@@ -190,7 +226,7 @@ function buildTailStreaks(anchors) {
         t: Math.random(),                 // phase along its lane
         lane: randRange(2, 5),            // head oscillates near the lamp
         speedMul: randRange(1.8, 2.8),
-        width: randRange(0.08, 0.25),
+        width: randRange(0.7, 1.5),
       });
       const i = data.length - 1;
       // hot core red with a hint of orange variation (both ribbon quads)
@@ -201,7 +237,22 @@ function buildTailStreaks(anchors) {
     }
   }
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  return { mesh, data };
+
+  // ribbon orientations (rotation matrices; naive Euler would point the
+  // length sideways). Vertical ribbon: length -> world -Z, width -> Y.
+  // Flat ribbon: length -> world -Z, width -> X (lies on the road plane).
+  const vertQuat = new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(0, 0, -1),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(1, 0, 0)));
+  const flatQuat = new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(0, 0, -1),
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0, -1, 0)));
+
+  return { mesh, data, vertQuat, flatQuat };
 }
 
 // ---------------------------------------------------------------- factory
@@ -325,8 +376,8 @@ export function createParticles(taillightAnchors = []) {
       petals.mesh.instanceMatrix.needsUpdate = true;
     }
 
-    // ---- anime taillight streaks: lanes of red glow that flow backward
-    // from each lamp; the quad head sits at the lamp, tail runs back.
+    // ---- anime taillight streaks: tapered trails, thin at the lamp and
+    // widening + fading backward; head sits at the lamp, body runs back.
     {
       for (let i = 0; i < tail.data.length; i++) {
         const p = tail.data[i];
@@ -337,16 +388,14 @@ export function createParticles(taillightAnchors = []) {
         // Long body running back PAST the chase camera: the visible slice
         // between lamp and camera reads as a red line flying at you.
         const streakLen = 7.0 + v * 0.22;
-        dummy.position.set(p.ax + p.offX, p.ay + p.offY, headZ - streakLen / 2);
-        // Crossed ribbon: one sideways, one flat, so the streak reads from
-        // any chase angle instead of disappearing edge-on.
-        dummy.rotation.set(0, Math.PI / 2, 0);
+        dummy.position.set(p.ax + p.offX, p.ay + p.offY, headZ);
         dummy.scale.set(streakLen, p.width, 1);
+
+        dummy.quaternion.copy(tail.vertQuat);
         dummy.updateMatrix();
         tail.mesh.setMatrixAt(i * 2, dummy.matrix);
 
-        dummy.rotation.set(Math.PI / 2, 0, 0);
-        dummy.scale.set(streakLen, p.width, 1);
+        dummy.quaternion.copy(tail.flatQuat);
         dummy.updateMatrix();
         tail.mesh.setMatrixAt(i * 2 + 1, dummy.matrix);
       }
