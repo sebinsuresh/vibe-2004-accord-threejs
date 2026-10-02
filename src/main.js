@@ -3,12 +3,20 @@ import { SIM } from './config.js';
 import { createCar } from './car.js';
 import { createEnvironment } from './environment.js';
 import { createParticles } from './particles.js';
+import { createClouds } from './clouds.js';
 
 const container = document.getElementById('app');
 const speedLabel = document.getElementById('speed');
 
+// ?capture=1 switches to deterministic scripted rendering (see scripts/capture.py)
+const CAPTURE = new URLSearchParams(location.search).has('capture');
+
 // ---------------------------------------------------------------- renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  // needed so CDP screenshots see the WebGL buffer after the render call
+  preserveDrawingBuffer: CAPTURE,
+});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -128,32 +136,57 @@ scene.add(car.group);
 const environment = createEnvironment();
 scene.add(environment.group);
 
-const particles = createParticles();
+const particles = createParticles(car.taillightAnchors);
 scene.add(particles.group);
+
+const clouds = createClouds();
+scene.add(clouds.group);
 
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
 
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-
+function step(dt, t) {
   // Gentle speed oscillation so the sim feels alive (110-130 km/h).
-  SIM.speedKmh = SIM.baseSpeedKmh + Math.sin(clock.elapsedTime * 0.7) * 10;
+  SIM.speedKmh = SIM.baseSpeedKmh + Math.sin(t * 0.7) * 10;
   SIM.distance += SIM.speedMs * dt;
 
-  car.update(dt, clock.elapsedTime);
+  car.update(dt, t);
   environment.update(dt);
-  particles.update(dt);
+  particles.update(dt, t);
+  clouds.update(dt);
 
   // Camera micro-sway synced to speed.
-  camera.position.y = 2.1 + Math.sin(clock.elapsedTime * 5.3) * 0.008 * SIM.speedKmh * 0.05;
+  camera.position.y = 2.1 + Math.sin(t * 5.3) * 0.008 * SIM.speedKmh * 0.05;
   camera.lookAt(0, 0.75, 0.6);
 
   speedLabel.textContent = Math.round(SIM.speedKmh);
   renderer.render(scene, camera);
 }
-animate();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  step(dt, clock.elapsedTime);
+}
+
+// ---------------------------------------------------------------- capture mode
+// `?capture=1` freezes the free-run loop and exposes a deterministic
+// fixed-timestep renderer for the frame-grab script (scripts/capture.py).
+if (CAPTURE) {
+  const CAPTURE_DT = 1 / 30;
+  window.__scene = scene;
+  window.__camera = camera;
+  window.__sim = {
+    dt: CAPTURE_DT,
+    renderFrame(i) {
+      SIM.distance = i * CAPTURE_DT * SIM.speedMs; // reset for determinism
+      step(CAPTURE_DT, i * CAPTURE_DT);
+    },
+  };
+  window.__simReady = true;
+} else {
+  animate();
+}
 
 // ---------------------------------------------------------------- resize
 window.addEventListener('resize', () => {

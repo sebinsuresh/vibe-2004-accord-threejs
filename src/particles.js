@@ -2,11 +2,15 @@ import * as THREE from 'three';
 import { SIM, randRange } from './config.js';
 
 /**
- * Three FX layers, all streaming backward (-Z) to sell high speed:
+ * FX layers, all streaming backward (-Z) to sell high speed:
  *  1. Wind streaks  — LineSegments with per-particle velocity vectors that
  *                     bend around the car's silhouette (airflow feel).
  *  2. Road dust     — InstancedMesh motes kicked up near the wheels.
  *  3. Light trails  — additive streaks in the far periphery.
+ *  4. Petals        — InstancedMesh flower petals tumbling past, spun by
+ *                     the slipstream.
+ *  5. Taillight anime streaks — additive red lines emitted from the light
+ *                     clusters, drawn long like speed-line manga FX.
  * Returns { group, update(dt) }.
  */
 
@@ -108,19 +112,112 @@ function buildTrails(count) {
   return { lines, data, geo };
 }
 
+// ---------------------------------------------------------------- petals
+function makePetalTexture() {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  // teardrop petal, soft edge, warm pink with a pale core
+  const g = ctx.createRadialGradient(size * 0.5, size * 0.62, 2, size * 0.5, size * 0.55, size * 0.45);
+  g.addColorStop(0, 'rgba(255,240,242,0.95)');
+  g.addColorStop(0.5, 'rgba(255,183,197,0.9)');
+  g.addColorStop(1, 'rgba(250,150,170,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(size * 0.5, size * 0.55, size * 0.34, size * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function buildPetals(count) {
+  // flat quad petal; double-sided so tumbling always shows a face
+  const geo = new THREE.PlaneGeometry(0.09, 0.12);
+  const mat = new THREE.MeshBasicMaterial({
+    map: makePetalTexture(), transparent: true, side: THREE.DoubleSide,
+    depthWrite: false, fog: true,
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.frustumCulled = false;
+
+  const data = [];
+  for (let i = 0; i < count; i++) {
+    data.push({
+      x: randRange(-BOX.x, BOX.x),
+      y: randRange(0.2, 3.2),
+      z: randRange(-BOX.z, BOX.z),
+      speedMul: randRange(0.85, 1.25),
+      swayAmp: randRange(0.3, 1.1),
+      swayFreq: randRange(1.5, 4.0),
+      phase: Math.random() * Math.PI * 2,
+      spin: randRange(2, 7),
+      fall: randRange(0.15, 0.55),
+      scale: randRange(0.7, 1.8),
+    });
+  }
+  return { mesh, data };
+}
+
+// ---------------------------------------------------------------- anime taillight streaks
+function buildTailStreaks(anchors) {
+  // Each taillight anchor emits several long red glow quads that stream
+  // straight back — the manga "speed line" look anchored to the lamps.
+  // Quads instead of LineSegments: WebGL lines are 1px and read as nothing.
+  const perAnchor = 6;
+  const count = anchors.length * perAnchor * 2; // crossed ribbon: 2 quads/streak
+  const geo = new THREE.PlaneGeometry(1, 1); // scaled per instance
+  const mat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0.38, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    color: 0xffffff,
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.frustumCulled = false;
+
+  const data = [];
+  for (let a = 0; a < anchors.length; a++) {
+    const [ax, ay, az] = anchors[a];
+    for (let j = 0; j < perAnchor; j++) {
+      data.push({
+        ax, ay, az,
+        offX: randRange(-0.22, 0.22),
+        offY: randRange(-0.14, 0.14),
+        t: Math.random(),                 // phase along its lane
+        lane: randRange(2, 5),            // head oscillates near the lamp
+        speedMul: randRange(1.8, 2.8),
+        width: randRange(0.08, 0.25),
+      });
+      const i = data.length - 1;
+      // hot core red with a hint of orange variation (both ribbon quads)
+      const warm = randRange(0.0, 0.15);
+      const col = new THREE.Color(1.0, 0.10 + warm, 0.05 + warm * 0.5);
+      mesh.setColorAt(i * 2, col);
+      mesh.setColorAt(i * 2 + 1, col);
+    }
+  }
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  return { mesh, data };
+}
+
 // ---------------------------------------------------------------- factory
-export function createParticles() {
+export function createParticles(taillightAnchors = []) {
   const group = new THREE.Group();
-  const wind = buildWind(260);
+  const wind = buildWind(420);
   const dust = buildDust(140);
   const trails = buildTrails(40);
-  group.add(wind.lines, dust.mesh, trails.lines);
+  const petals = buildPetals(120);
+  const anchors = taillightAnchors.length
+    ? taillightAnchors
+    : [[0.62, 0.87, -2.5], [-0.62, 0.87, -2.5], [0.885, 0.86, -2.3], [-0.885, 0.86, -2.3]];
+  const tail = buildTailStreaks(anchors);
+  group.add(wind.lines, dust.mesh, trails.lines, petals.mesh, tail.mesh);
 
   const dummy = new THREE.Object3D();
 
-  function update(dt) {
+  function update(dt, t = performance.now() * 0.001) {
     const v = SIM.speedMs;
-    const t = performance.now() * 0.001;
 
     // ---- wind streaks: velocity vector = -Z flow + lateral drift that
     // bends outward when passing the car body (pressure field feel).
@@ -169,6 +266,7 @@ export function createParticles() {
         }
         dummy.position.set(p.x, p.y, p.z);
         dummy.scale.setScalar(p.scale);
+        dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         dust.mesh.setMatrixAt(i, dummy.matrix);
       }
@@ -192,6 +290,61 @@ export function createParticles() {
         pos[i6 + 3] = p.x; pos[i6 + 4] = p.y; pos[i6 + 5] = p.z + len;
       }
       trails.geo.attributes.position.needsUpdate = true;
+    }
+
+    // ---- petals: tumble in the slipstream, sway sideways, fall slowly.
+    {
+      for (let i = 0; i < petals.data.length; i++) {
+        const p = petals.data[i];
+        p.z -= v * p.speedMul * dt;
+        p.y -= p.fall * dt;
+        const sway = Math.sin(t * p.swayFreq + p.phase) * p.swayAmp * dt;
+        p.x += sway + (Math.abs(p.x) < 1.4 && Math.abs(p.z) < 3 ? Math.sign(p.x || 1) * 0.6 * dt : 0);
+
+        if (p.z < -BOX.z || p.y < 0.02) {
+          p.z = randRange(BOX.z * 0.4, BOX.z);
+          p.y = randRange(0.6, 3.2);
+          p.x = randRange(-BOX.x, BOX.x);
+        }
+
+        dummy.position.set(p.x, p.y, p.z);
+        dummy.rotation.set(
+          t * p.spin + p.phase,
+          t * p.spin * 0.7,
+          Math.sin(t * p.swayFreq + p.phase) * 1.2);
+        dummy.scale.setScalar(p.scale);
+        dummy.updateMatrix();
+        petals.mesh.setMatrixAt(i, dummy.matrix);
+      }
+      petals.mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // ---- anime taillight streaks: lanes of red glow that flow backward
+    // from each lamp; the quad head sits at the lamp, tail runs back.
+    {
+      for (let i = 0; i < tail.data.length; i++) {
+        const p = tail.data[i];
+        p.t += (v * p.speedMul / p.lane) * dt;
+        if (p.t > 1) p.t -= 1;
+
+        const headZ = p.az - p.t * p.lane;
+        // Long body running back PAST the chase camera: the visible slice
+        // between lamp and camera reads as a red line flying at you.
+        const streakLen = 7.0 + v * 0.22;
+        dummy.position.set(p.ax + p.offX, p.ay + p.offY, headZ - streakLen / 2);
+        // Crossed ribbon: one sideways, one flat, so the streak reads from
+        // any chase angle instead of disappearing edge-on.
+        dummy.rotation.set(0, Math.PI / 2, 0);
+        dummy.scale.set(streakLen, p.width, 1);
+        dummy.updateMatrix();
+        tail.mesh.setMatrixAt(i * 2, dummy.matrix);
+
+        dummy.rotation.set(Math.PI / 2, 0, 0);
+        dummy.scale.set(streakLen, p.width, 1);
+        dummy.updateMatrix();
+        tail.mesh.setMatrixAt(i * 2 + 1, dummy.matrix);
+      }
+      tail.mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
