@@ -152,46 +152,50 @@ export function createCar() {
   lower.castShadow = true;
   body.add(lower);
 
-  // ---- greenhouse: set BACK on the long hood. Windshield base z=+0.50
-  // (0.87 m behind the front axle), ~45 deg rake, roof z -0.10..-1.30,
-  // rear glass ~44 deg. profileX = -worldZ.
-  const glassProfile = [
-    [-0.50, 0.97], [0.00, 1.42], [1.30, 1.40], [1.70, 0.99],
+  // ---- greenhouse: ONE body-colour shell (roof + pillars + C-pillar
+  // mass) extruded from the beltline up, with dark glass panels inset
+  // into its faces. This is how the real car is built (painted shell +
+  // windows) and it removes the floating-slab/strut artifacts the old
+  // glass-slab + stuck-on-pillar approach produced.
+  // profileX = -worldZ; car faces +Z.
+  const upperProfile = [
+    [-0.50, 0.96],   // cowl / windshield base
+    [0.00, 1.42],    // windshield top
+    [1.30, 1.40],    // roof rear edge
+    [1.70, 0.96],    // rear glass base at decklid
   ];
-  // halfWidth 0.82 (was 0.76): a 14 cm step between body side (0.90) and
-  // glass reads as a shelf; the real glasshouse is nearly flush at the
-  // beltline. Bigger bevel = rounder corners on the low-poly slab.
-  const greenhouse = new THREE.Mesh(extrudeProfile(glassProfile, 0.82, 0.10, 4), MAT.glass);
-  greenhouse.castShadow = true;
-  body.add(greenhouse);
+  const upper = new THREE.Mesh(extrudeProfile(upperProfile, 0.86, 0.10, 4), MAT.paint);
+  upper.castShadow = true;
+  body.add(upper);
 
-  // ---- window pillars: the extruded greenhouse is one solid glass
-  // slab; without A/B/C pillars it reads as a hatchback blob. Body-
-  // colour strips on each side split it into door glass + quarter glass.
-  // extrudeProfile maps profileX = -worldZ, and the car faces +Z, so the
-  // windshield sits at z ~ +0.35..-0.10 and the rear glass at z ~ -1.30..-1.70.
-  // x must STRADDLE the glass surface (halfWidth 0.82). A and C pillars are
-  // ROTATED to follow the glass rake: a vertical box on a sloped surface
-  // pokes out above the glass and reads as a stray white prism.
-  // windshield: (z 0.50,y 0.97) -> (z 0.00,y 1.42) => 45 deg from vertical
-  //   rear glass: (z -1.30,y 1.40) -> (z -1.70,y 0.99) => ~44 deg from vertical
+  // ---- glass panels inset into the shell faces (x = +-0.865 sits just
+  // outside the 0.86 shell surface so the panel reads as flush glass).
+  // Rectangle edges must stay INSIDE the sloped A/C-pillar faces: at the
+  // window top (y 1.37) the windshield face is at z 0.05 and the rear
+  // glass face at z -1.33; at the bottom (y 1.03) z 0.42 / -1.64.
   for (const s of [1, -1]) {
-    body.add(box(0.03, 0.48, 0.06, MAT.paint, s * 0.82, 1.18, -0.65));   // B-pillar (near vertical)
-    const cPillar = box(0.03, 0.56, 0.06, MAT.paint, s * 0.82, 1.195, -1.50);
-    cPillar.rotation.x = THREE.MathUtils.degToRad(44);   // top leans toward +Z, along the glass
-    body.add(cPillar);
-    const aPillar = box(0.03, 0.62, 0.06, MAT.paint, s * 0.82, 1.195, 0.25);
-    aPillar.rotation.x = THREE.MathUtils.degToRad(-45);
-    body.add(aPillar);
+    body.add(box(0.02, 0.34, 0.58, MAT.glass, s * 0.865, 1.20, -0.29));   // front door window (z 0.00..-0.58)
+    body.add(box(0.02, 0.34, 0.52, MAT.glass, s * 0.865, 1.20, -0.94));   // rear door window (z -0.68..-1.20)
+    body.add(box(0.02, 0.24, 0.12, MAT.glass, s * 0.865, 1.13, -1.37));   // quarter glass (z -1.31..-1.43)
   }
+  // windshield: faired into the front face of the shell (face runs
+  // (z 0.50,y 0.96) -> (z 0.00,y 1.42): atan(0.50/0.46) = 47.4 deg from
+  // vertical, length 0.68). Panel 0.60 tall, rotated EXACTLY along the
+  // face — a few degrees off makes the corners poke through the roof
+  // edge and read as a floating diagonal line.
+  const windshield = box(1.50, 0.60, 0.02, MAT.glass, 0, 1.19, 0.25);
+  windshield.rotation.x = THREE.MathUtils.degToRad(-47.4);
+  body.add(windshield);
+  // rear glass: face (z -1.30,y 1.40) -> (z -1.70,y 0.96):
+  // atan(0.40/0.44) = 42.3 deg from vertical, length 0.59.
+  const rearGlass = box(1.50, 0.52, 0.02, MAT.glass, 0, 1.18, -1.50);
+  rearGlass.rotation.x = THREE.MathUtils.degToRad(42.3);
+  body.add(rearGlass);
 
-  // ---- roof panel: body-colour steel roof across the top of the
-  // greenhouse (roof edge z -0.10..-1.30 at y ~1.41). Without it the
-  // glass slab reads as a glass roof / convertible top.
-  body.add(box(1.52, 0.03, 1.24, MAT.paint, 0, 1.425, -0.70));
-
-  // ---- sunroof: dark flush panel on the roof (roof spans z -0.10..-1.30)
-  body.add(box(0.72, 0.02, 0.62, MAT.darkTrim, 0, 1.442, -0.70));
+  // ---- sunroof: dark panel sunk flush into the shell roof (roof top at
+  // y 1.42; panel top 1.422 — a proud panel reads as a line floating
+  // above the roofline in side view)
+  body.add(box(0.72, 0.02, 0.62, MAT.darkTrim, 0, 1.412, -0.70));
 
   // ---- bumpers: body-colour, flush with the body (the bevelled profile
   // already reads as a rounded bumper; separate slabs looked like extra
@@ -224,10 +228,10 @@ export function createCar() {
   // big face on the tail + long wrap up the quarter panel. Dark bezel +
   // taller face so the cluster reads as a housing, not a decal.
   for (const s of [1, -1]) {
-    body.add(box(0.58, 0.26, 0.03, MAT.darkTrim, s * 0.58, 0.88, REAR_Z + 0.002));   // bezel
-    body.add(box(0.52, 0.22, 0.04, MAT.taillight, s * 0.58, 0.88, REAR_Z + 0.012));  // face (x 0.32..0.84)
+    body.add(box(0.58, 0.26, 0.02, MAT.darkTrim, s * 0.58, 0.88, REAR_Z + 0.010));   // bezel (flush with tail face)
+    body.add(box(0.52, 0.22, 0.03, MAT.taillight, s * 0.58, 0.88, REAR_Z + 0.015));  // face (4mm proud of tail face)
     body.add(box(0.03, 0.20, 0.72, MAT.taillight, s * 0.895, 0.88, -1.88));          // wrap sweeping forward along the quarter panel
-    body.add(box(0.12, 0.06, 0.045, MAT.reverseLens, s * 0.40, 0.79, REAR_Z + 0.004)); // clear reverse strip, bottom edge
+    body.add(box(0.12, 0.06, 0.035, MAT.reverseLens, s * 0.40, 0.79, REAR_Z + 0.012)); // clear reverse strip, bottom edge
   }
   // (high-mount stop lamp omitted: the greenhouse is a solid extruded
   // slab, so any lamp near the rear glass is buried inside it and reads
@@ -243,11 +247,11 @@ export function createCar() {
   }
 
   // ---- side mirrors: teardrop housing + small amber indicator, at the
-  // foot of the A-pillar (z ~ +0.45).
+  // foot of the A-pillar (shell face at z ~0.40 at mirror height).
   for (const s of [1, -1]) {
-    body.add(box(0.05, 0.04, 0.10, MAT.darkTrim, s * 0.94, 1.02, 0.51));
-    body.add(box(0.10, 0.12, 0.16, MAT.paint, s * 1.02, 1.06, 0.43));
-    body.add(box(0.02, 0.04, 0.06, MAT.amber, s * 1.075, 1.05, 0.49));
+    body.add(box(0.05, 0.04, 0.10, MAT.darkTrim, s * 0.94, 1.02, 0.40));
+    body.add(box(0.10, 0.12, 0.16, MAT.paint, s * 1.02, 1.06, 0.32));
+    body.add(box(0.02, 0.04, 0.06, MAT.amber, s * 1.075, 1.05, 0.38));
   }
 
   // ---- door handles (body-colour pull-type, on the shoulder line)
@@ -259,7 +263,8 @@ export function createCar() {
   // ---- fuel filler door (left rear quarter)
   const filler = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 16), MAT.paint);
   filler.rotation.z = Math.PI / 2;
-  filler.position.set(-0.905, 0.85, -1.95);
+  // fuel door sits AHEAD of the taillight wrap (wrap spans z -1.52..-2.24)
+  filler.position.set(-0.905, 0.85, -1.30);
   body.add(filler);
 
   // ---- exhaust tip: single outlet on the car's LEFT side (USDM CL7),
