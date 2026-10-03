@@ -14,7 +14,9 @@ import { SIM, randRange } from './config.js';
  * Returns { group, update(dt) }.
  */
 
-const BOX = { x: 9, y: 4.5, z: 70 };   // spawn volume (x, y, z-half-extents)
+const BOX = { x: 9, y: 3.0, z: 70 };   // spawn volume (x, y, z-half-extents)
+// y capped at 3.0: streaks at 4.5 m projected ABOVE the horizon at 70 m
+// distance and read as orange lines scratched across the sky.
 
 // ---------------------------------------------------------------- wind
 function buildWind(count) {

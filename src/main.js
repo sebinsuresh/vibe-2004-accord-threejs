@@ -77,8 +77,8 @@ const skyMat = new THREE.ShaderMaterial({
   depthWrite: false,
   fog: false,
   uniforms: {
-    top: { value: new THREE.Color(0x24517f) },
-    horizon: { value: new THREE.Color(0xf0c894) },
+    top: { value: new THREE.Color(0x16375c) },
+    horizon: { value: new THREE.Color(0xd8a878) },
     bottom: { value: new THREE.Color(0x3a3d41) },
   },
   vertexShader: /* glsl */ `
@@ -92,17 +92,33 @@ const skyMat = new THREE.ShaderMaterial({
     varying vec3 vDir;
     void main() {
       float h = vDir.y;
-      vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.5))
+      // gradient reaches blue FAST (pow 0.22): the camera looks nearly
+      // horizontal, so with pow 0.5 the whole visible band was the pale
+      // horizon color = a white sky with nowhere for clouds to contrast.
+      vec3 c = h > 0.0 ? mix(horizon, top, pow(h, 0.22))
                        : mix(horizon, bottom, pow(-h, 0.5));
       // golden-hour sun bloom low on the horizon near the vanishing point
-      // (wide soft falloff — tight exponents read as a skybox seam)
+      // (wide soft falloff — tight exponents read as a skybox seam).
+      // Kept SUBTLE: measured sky pixels were clipping to 255,255,255
+      // across the whole band, which erased every cloud (nothing can
+      // contrast against pure white).
       float d = max(dot(normalize(vDir), normalize(vec3(0.5, 0.02, 0.85))), 0.0);
-      c += vec3(1.0, 0.62, 0.30) * pow(d, 3.0) * 0.45;
-      c += vec3(1.0, 0.75, 0.45) * pow(d, 18.0) * 0.8;
+      c += vec3(1.0, 0.62, 0.30) * pow(d, 3.0) * 0.12;
+      c += vec3(1.0, 0.75, 0.45) * pow(d, 18.0) * 0.25;
+      // A raw ShaderMaterial bypasses three.js tonemapping + colorspace
+      // encoding, so linear values >= 1.0 clipped to 255 and the sky read
+      // as flat white. Apply the same ACES fit + sRGB encode the rest of
+      // the scene gets, so sky and clouds share one value scale.
+      c *= 1.15;   // renderer.toneMappingExposure
+      c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);
+      c = pow(c, vec3(1.0 / 2.2));
+      // ordered-ish dither: the smooth gradient banded in 8-bit output
+      float dth = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      c += (dth - 0.5) / 255.0;
       gl_FragColor = vec4(c, 1.0);
     }`,
 });
-scene.add(new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), skyMat));
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(1600, 32, 16), skyMat));
 
 // Atmospheric fog — atmospheric perspective: distant props fade toward
 // a warm pale haze, keeping the strongest contrast in the foreground.
@@ -110,7 +126,7 @@ scene.fog = new THREE.Fog(0xd8c8b2, 30, 170);
 
 // ---------------------------------------------------------------- camera
 const camera = new THREE.PerspectiveCamera(
-  50, window.innerWidth / window.innerHeight, 0.1, 1000);
+  50, window.innerWidth / window.innerHeight, 0.1, 4000);
 camera.position.set(-4.2, 2.0, -5.6); // low 3/4 rear-left chase view
 
 // ---------------------------------------------------------------- lights
@@ -191,6 +207,8 @@ function animate() {
 // fixed-timestep renderer for the frame-grab script (scripts/capture.py).
 if (CAPTURE) {
   const CAPTURE_DT = 1 / 30;
+  window.__THREE = THREE;
+  window.__renderer = renderer;
   window.__scene = scene;
   window.__camera = camera;
   window.__sim = {
