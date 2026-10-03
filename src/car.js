@@ -13,8 +13,8 @@ import { SIM } from './config.js';
 
 const WHEEL_RADIUS = 0.33;
 const WB_HALF = 1.37;             // half wheelbase
-const FRONT_Z = WB_HALF + 0.89;   // 2.26 nose
-const REAR_Z = -(WB_HALF + 1.22); // -2.59 tail
+const FRONT_Z = 2.31;             // nose (front overhang 0.94)
+const REAR_Z = -2.48;             // tail (rear overhang 1.11)
 
 // ---------------------------------------------------------------- materials
 function makePaint() {
@@ -135,33 +135,63 @@ export function createCar() {
   const body = new THREE.Group();   // everything except wheels (sprung mass)
   group.add(body);
 
-  // ---- lower body: notchback silhouette, long trunk, short nose.
+  // ---- lower body: notchback silhouette, LONG hood (cowl ~0.8 m behind
+  // the front axle, like the real CL7), moderate cabin, long trunk.
   // profileX = -z. Hood nearly flat with gentle rise to cowl, cowl step,
   // high beltline, flat decklid with a small lip kick at the tail.
   const lowerProfile = [
-    [-2.26, 0.42], [-2.24, 0.62], [-2.22, 0.86],   // nose / bumper face
-    [-2.20, 0.92], [-1.60, 0.96], [-1.02, 1.00],   // hood, gentle rise
-    [-0.98, 0.95],                                 // cowl step down
-    [1.30, 0.96],                                  // beltline under glass
-    [2.30, 0.98], [2.42, 1.02],                    // decklid + lip kick
-    [2.55, 0.95], [2.58, 0.60], [2.55, 0.42],      // tail
-    [2.50, 0.30], [-2.20, 0.30],                   // underside
+    [-2.31, 0.42], [-2.29, 0.62], [-2.27, 0.86],   // nose / bumper face
+    [-2.25, 0.92], [-1.60, 0.96], [-0.55, 1.00],   // long hood, gentle rise
+    [-0.50, 0.95],                                 // cowl step down
+    [1.20, 0.96],                                  // beltline under glass
+    [2.20, 0.98], [2.32, 1.02],                    // decklid + lip kick
+    [2.45, 0.95], [2.48, 0.60], [2.45, 0.42],      // tail
+    [2.40, 0.30], [-2.25, 0.30],                   // underside
   ];
-  const lower = new THREE.Mesh(extrudeProfile(lowerProfile, 0.90, 0.12), MAT.paint);
+  const lower = new THREE.Mesh(extrudeProfile(lowerProfile, 0.90, 0.16), MAT.paint);
   lower.castShadow = true;
   body.add(lower);
 
-  // ---- greenhouse: raked windshield (~36 deg), low broad roof, raked
-  // rear glass, thick C-pillar feel. Tall airy cabin per reference.
+  // ---- greenhouse: set BACK on the long hood. Windshield base z=+0.50
+  // (0.87 m behind the front axle), ~45 deg rake, roof z -0.10..-1.30,
+  // rear glass ~44 deg. profileX = -worldZ.
   const glassProfile = [
-    [-0.95, 0.97], [-0.62, 1.42], [0.35, 1.45], [0.70, 1.43], [1.15, 0.99],
+    [-0.50, 0.97], [0.00, 1.42], [1.30, 1.40], [1.70, 0.99],
   ];
-  const greenhouse = new THREE.Mesh(extrudeProfile(glassProfile, 0.76, 0.06, 4), MAT.glass);
+  // halfWidth 0.82 (was 0.76): a 14 cm step between body side (0.90) and
+  // glass reads as a shelf; the real glasshouse is nearly flush at the
+  // beltline. Bigger bevel = rounder corners on the low-poly slab.
+  const greenhouse = new THREE.Mesh(extrudeProfile(glassProfile, 0.82, 0.10, 4), MAT.glass);
   greenhouse.castShadow = true;
   body.add(greenhouse);
 
-  // ---- sunroof: dark flush panel on the roof
-  body.add(box(0.72, 0.02, 0.62, MAT.darkTrim, 0, 1.452, -0.15));
+  // ---- window pillars: the extruded greenhouse is one solid glass
+  // slab; without A/B/C pillars it reads as a hatchback blob. Body-
+  // colour strips on each side split it into door glass + quarter glass.
+  // extrudeProfile maps profileX = -worldZ, and the car faces +Z, so the
+  // windshield sits at z ~ +0.35..-0.10 and the rear glass at z ~ -1.30..-1.70.
+  // x must STRADDLE the glass surface (halfWidth 0.82). A and C pillars are
+  // ROTATED to follow the glass rake: a vertical box on a sloped surface
+  // pokes out above the glass and reads as a stray white prism.
+  // windshield: (z 0.50,y 0.97) -> (z 0.00,y 1.42) => 45 deg from vertical
+  //   rear glass: (z -1.30,y 1.40) -> (z -1.70,y 0.99) => ~44 deg from vertical
+  for (const s of [1, -1]) {
+    body.add(box(0.03, 0.48, 0.06, MAT.paint, s * 0.82, 1.18, -0.65));   // B-pillar (near vertical)
+    const cPillar = box(0.03, 0.56, 0.06, MAT.paint, s * 0.82, 1.195, -1.50);
+    cPillar.rotation.x = THREE.MathUtils.degToRad(44);   // top leans toward +Z, along the glass
+    body.add(cPillar);
+    const aPillar = box(0.03, 0.62, 0.06, MAT.paint, s * 0.82, 1.195, 0.25);
+    aPillar.rotation.x = THREE.MathUtils.degToRad(-45);
+    body.add(aPillar);
+  }
+
+  // ---- roof panel: body-colour steel roof across the top of the
+  // greenhouse (roof edge z -0.10..-1.30 at y ~1.41). Without it the
+  // glass slab reads as a glass roof / convertible top.
+  body.add(box(1.52, 0.03, 1.24, MAT.paint, 0, 1.425, -0.70));
+
+  // ---- sunroof: dark flush panel on the roof (roof spans z -0.10..-1.30)
+  body.add(box(0.72, 0.02, 0.62, MAT.darkTrim, 0, 1.442, -0.70));
 
   // ---- bumpers: body-colour, flush with the body (the bevelled profile
   // already reads as a rounded bumper; separate slabs looked like extra
@@ -180,49 +210,63 @@ export function createCar() {
   // + fender wrap meeting at the corner, no gaps). The 2004 pre-facelift
   // has the amber turn/reflectors INSIDE the clear lens, not as a
   // separate side box — so the amber sits inset on the outer front face.
+  // A dark bezel behind each lens makes the cluster read against the
+  // silver body (white-on-silver was invisible from the front).
   for (const s of [1, -1]) {
+    body.add(box(0.54, 0.21, 0.03, MAT.darkTrim, s * 0.59, 0.84, FRONT_Z - 0.028));   // bezel
     body.add(box(0.50, 0.17, 0.04, MAT.headlight, s * 0.59, 0.84, FRONT_Z - 0.015)); // front face (x 0.34..0.84)
-    body.add(box(0.04, 0.15, 0.52, MAT.headlight, s * 0.91, 0.83, 1.96));            // fender wrap on the body side (x 0.89..0.93)
+    body.add(box(0.03, 0.15, 0.40, MAT.headlight, s * 0.895, 0.83, 1.85));           // fender wrap, kept clear of the bevelled nose corner
     body.add(box(0.10, 0.10, 0.045, MAT.amber, s * 0.76, 0.82, FRONT_Z - 0.007));    // inner amber section
+    body.add(box(0.14, 0.05, 0.046, MAT.darkTrim, s * 0.45, 0.90, FRONT_Z - 0.006)); // projector cut
   }
 
   // ---- taillights: connected L-shaped wedge per side; face meets the
-  // corner wrap with no gap, plus a clear reverse-light section.
+  // corner wrap with no gap, plus a clear reverse-light section. Dark
+  // bezel + taller face so the cluster reads as a housing, not a decal.
   for (const s of [1, -1]) {
+    body.add(box(0.56, 0.20, 0.03, MAT.darkTrim, s * 0.60, 0.87, REAR_Z + 0.002));   // bezel
     body.add(box(0.50, 0.15, 0.04, MAT.taillight, s * 0.60, 0.87, REAR_Z + 0.012));  // face (x 0.35..0.85)
-    body.add(box(0.04, 0.13, 0.56, MAT.taillight, s * 0.91, 0.86, -2.29));           // wrap (z -2.01..-2.57)
+    body.add(box(0.03, 0.13, 0.40, MAT.taillight, s * 0.895, 0.86, -2.06));          // wrap: kept clear of the bevelled tail corner (0.16 bevel rounds the side in there, which left the wrap floating)
     body.add(box(0.12, 0.10, 0.045, MAT.reverseLens, s * 0.41, 0.85, REAR_Z + 0.004));
   }
+  // (high-mount stop lamp omitted: the greenhouse is a solid extruded
+  // slab, so any lamp near the rear glass is buried inside it and reads
+  // as a floating bar.)
 
-  // ---- chrome beltline molding (window base) + body-colour door molding
+  // ---- beltline molding + body-colour door molding. Paint, not chrome:
+  // the chrome strip reflected the blue sky and read as a blue racing
+  // stripe along the whole shoulder (not an Accord feature).
+  // Doors span cowl z=+0.50 to rear glass base z=-1.70.
   for (const s of [1, -1]) {
-    body.add(box(0.015, 0.025, 2.05, MAT.chrome, s * 0.902, 0.975, -0.10));
-    body.add(box(0.015, 0.035, 1.90, MAT.paint, s * 0.902, 0.72, -0.05));
+    body.add(box(0.015, 0.025, 2.05, MAT.paint, s * 0.902, 0.975, -0.60));
+    body.add(box(0.015, 0.035, 1.90, MAT.paint, s * 0.902, 0.72, -0.60));
   }
 
-  // ---- side mirrors: teardrop housing + small amber indicator
+  // ---- side mirrors: teardrop housing + small amber indicator, at the
+  // foot of the A-pillar (z ~ +0.45).
   for (const s of [1, -1]) {
-    body.add(box(0.05, 0.04, 0.10, MAT.darkTrim, s * 0.94, 1.02, 0.92));
-    body.add(box(0.10, 0.12, 0.16, MAT.paint, s * 1.02, 1.06, 0.84));
-    body.add(box(0.02, 0.04, 0.06, MAT.amber, s * 1.075, 1.05, 0.90));
+    body.add(box(0.05, 0.04, 0.10, MAT.darkTrim, s * 0.94, 1.02, 0.51));
+    body.add(box(0.10, 0.12, 0.16, MAT.paint, s * 1.02, 1.06, 0.43));
+    body.add(box(0.02, 0.04, 0.06, MAT.amber, s * 1.075, 1.05, 0.49));
   }
 
   // ---- door handles (body-colour pull-type, on the shoulder line)
   for (const s of [1, -1]) {
-    body.add(box(0.03, 0.03, 0.16, MAT.paint, s * 0.915, 0.93, 0.28));
-    body.add(box(0.03, 0.03, 0.16, MAT.paint, s * 0.915, 0.93, -0.46));
+    body.add(box(0.03, 0.03, 0.16, MAT.paint, s * 0.915, 0.93, -0.15));
+    body.add(box(0.03, 0.03, 0.16, MAT.paint, s * 0.915, 0.93, -0.90));
   }
 
   // ---- fuel filler door (left rear quarter)
   const filler = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 16), MAT.paint);
   filler.rotation.z = Math.PI / 2;
-  filler.position.set(-0.905, 0.85, -1.55);
+  filler.position.set(-0.905, 0.85, -1.95);
   body.add(filler);
 
-  // ---- exhaust tip
+  // ---- exhaust tip: tucked just inside the bumper face. Protruding
+  // past it, the chrome caught the warm sky and read as an orange fin.
   const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12), MAT.chrome);
   exhaust.rotation.x = Math.PI / 2;
-  exhaust.position.set(0.55, 0.34, REAR_Z - 0.02);
+  exhaust.position.set(0.55, 0.32, REAR_Z + 0.05);
   body.add(exhaust);
 
   // ---- license plates
@@ -265,10 +309,24 @@ export function createCar() {
     wheels.push(w);
   }
 
+  // ---- wheel arch rings: the body is a flat extruded slab, so the
+  // tires just poke through it and read as "oversized arches". A dark
+  // half-torus ring on each side at the wheel plane draws a real arch
+  // opening around each tire. Added to `group` (not `body`): they must
+  // stay planted with the wheels while the sprung body heaves.
+  for (const [x, y, z] of wheelPos) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(WHEEL_RADIUS + 0.075, 0.035, 6, 20, Math.PI),
+      MAT.darkTrim);
+    ring.rotation.y = Math.PI / 2;   // arc (XY, theta 0..pi) -> YZ, spans the top
+    ring.position.set(Math.sign(x) * 0.905, y, z);
+    group.add(ring);
+  }
+
   // Taillight world positions for the anime streak emitter.
   const taillightAnchors = [
     [0.62, 0.87, REAR_Z], [-0.62, 0.87, REAR_Z],
-    [0.885, 0.86, -2.30], [-0.885, 0.86, -2.30],
+    [0.885, 0.86, -2.06], [-0.885, 0.86, -2.06],
   ];
 
   // ---------------------------------------------------------------- update
