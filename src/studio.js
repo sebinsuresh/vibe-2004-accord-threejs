@@ -35,6 +35,11 @@ scene.add(fill);
 
 const car = createCar();
 scene.add(car.group);
+// The sim's fake contact-shadow blob renders as a floating quad on the
+// flat studio background — hide it here.
+car.group.traverse(o => {
+  if (o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry') o.visible = false;
+});
 
 // Neutralize env-map-dependent materials so the studio reads shape, not
 // reflections: swap the physical paint/glass for plain standards.

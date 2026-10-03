@@ -220,14 +220,14 @@ export function createCar() {
     body.add(box(0.14, 0.05, 0.046, MAT.darkTrim, s * 0.45, 0.90, FRONT_Z - 0.006)); // projector cut
   }
 
-  // ---- taillights: connected L-shaped wedge per side; face meets the
-  // corner wrap with no gap, plus a clear reverse-light section. Dark
-  // bezel + taller face so the cluster reads as a housing, not a decal.
+  // ---- taillights: the CL7's are LARGE triangular wraparound clusters:
+  // big face on the tail + long wrap up the quarter panel. Dark bezel +
+  // taller face so the cluster reads as a housing, not a decal.
   for (const s of [1, -1]) {
-    body.add(box(0.56, 0.20, 0.03, MAT.darkTrim, s * 0.60, 0.87, REAR_Z + 0.002));   // bezel
-    body.add(box(0.50, 0.15, 0.04, MAT.taillight, s * 0.60, 0.87, REAR_Z + 0.012));  // face (x 0.35..0.85)
-    body.add(box(0.03, 0.13, 0.40, MAT.taillight, s * 0.895, 0.86, -2.06));          // wrap: kept clear of the bevelled tail corner (0.16 bevel rounds the side in there, which left the wrap floating)
-    body.add(box(0.12, 0.10, 0.045, MAT.reverseLens, s * 0.41, 0.85, REAR_Z + 0.004));
+    body.add(box(0.58, 0.26, 0.03, MAT.darkTrim, s * 0.58, 0.88, REAR_Z + 0.002));   // bezel
+    body.add(box(0.52, 0.22, 0.04, MAT.taillight, s * 0.58, 0.88, REAR_Z + 0.012));  // face (x 0.32..0.84)
+    body.add(box(0.03, 0.20, 0.72, MAT.taillight, s * 0.895, 0.88, -1.88));          // wrap sweeping forward along the quarter panel
+    body.add(box(0.12, 0.06, 0.045, MAT.reverseLens, s * 0.40, 0.79, REAR_Z + 0.004)); // clear reverse strip, bottom edge
   }
   // (high-mount stop lamp omitted: the greenhouse is a solid extruded
   // slab, so any lamp near the rear glass is buried inside it and reads
@@ -262,11 +262,11 @@ export function createCar() {
   filler.position.set(-0.905, 0.85, -1.95);
   body.add(filler);
 
-  // ---- exhaust tip: tucked just inside the bumper face. Protruding
-  // past it, the chrome caught the warm sky and read as an orange fin.
+  // ---- exhaust tip: single outlet on the car's LEFT side (USDM CL7),
+  // tucked just inside the bumper face.
   const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12), MAT.chrome);
   exhaust.rotation.x = Math.PI / 2;
-  exhaust.position.set(0.55, 0.32, REAR_Z + 0.05);
+  exhaust.position.set(-0.55, 0.32, REAR_Z + 0.05);
   body.add(exhaust);
 
   // ---- license plates
@@ -325,8 +325,8 @@ export function createCar() {
 
   // Taillight world positions for the anime streak emitter.
   const taillightAnchors = [
-    [0.62, 0.87, REAR_Z], [-0.62, 0.87, REAR_Z],
-    [0.885, 0.86, -2.06], [-0.885, 0.86, -2.06],
+    [0.60, 0.88, REAR_Z], [-0.60, 0.88, REAR_Z],
+    [0.885, 0.88, -1.95], [-0.885, 0.88, -1.95],
   ];
 
   // ---------------------------------------------------------------- update
